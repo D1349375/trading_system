@@ -60,7 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $trade_message = "<div class='alert alert-danger bg-danger text-light border-0 mb-3 alert-dismissible fade show'>❌ 調整失敗：金額必須介於 $1,000 至 $10,000,000 之間。</div>";
         }
     }
-    // 🚀 分流二：處理「買入」或「賣出」 (必須要有資產與數量)
+
+    // 🚀 分流二：處理「買入」或「賣出」
     elseif ($action === 'buy' || $action === 'sell') {
         $asset_id = isset($_POST['asset_id']) ? (int)$_POST['asset_id'] : 0;
         $amount = isset($_POST['amount']) ? (float)$_POST['amount'] : 0;
@@ -69,7 +70,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             try {
                 $pdo->beginTransaction();
 
-                // 取得當前資產報價與名稱
                 $stmt = $pdo->prepare("SELECT current_price, symbol FROM Assets WHERE asset_id = ? AND status = 'trading'");
                 $stmt->execute([$asset_id]);
                 $asset = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -79,30 +79,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
                 if ($action === 'buy') {
                     // 【買入邏輯】
-                    $stmt = $pdo->prepare("SELECT balance FROM Users WHERE user_id = ?");
+                    $stmt = $pdo->prepare("SELECT balance FROM Users WHERE user_id = ? FOR UPDATE");
                     $stmt->execute([$current_user_id]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
                     if ($user['balance'] >= $total_value) {
+                        // 🚀 核心升級：計算新的「平均持倉成本」
+                        $stmt = $pdo->prepare("SELECT total_amount, avg_cost FROM Portfolios WHERE user_id = ? AND asset_id = ?");
+                        $stmt->execute([$current_user_id, $asset_id]);
+                        $port = $stmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        $old_amount = $port ? (float)$port['total_amount'] : 0;
+                        $old_cost = $port ? (float)$port['avg_cost'] : 0;
+                        $new_amount = $old_amount + $amount;
+                        // 公式：(原本總價值 + 這次買入總價值) / 買入後總數量
+                        $new_avg_cost = (($old_amount * $old_cost) + $total_value) / $new_amount;
+
                         $pdo->prepare("UPDATE Users SET balance = balance - ? WHERE user_id = ?")->execute([$total_value, $current_user_id]);
                         $pdo->prepare("INSERT INTO Transactions (user_id, asset_id, tx_type, amount, price_at_tx, total_value) VALUES (?, ?, 'buy', ?, ?, ?)")->execute([$current_user_id, $asset_id, $amount, $asset['current_price'], $total_value]);
-                        $pdo->prepare("INSERT INTO Portfolios (user_id, asset_id, total_amount) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE total_amount = total_amount + ?")->execute([$current_user_id, $asset_id, $amount, $amount]);
-                        $trade_message = "<div class='alert alert-success bg-success text-light border-0 mb-3 alert-dismissible fade show'>🎉 成功買入 {$amount} 單位 {$asset['symbol']}！</div>";
+                        
+                        // 寫入/更新持倉與平均成本
+                        $pdo->prepare("INSERT INTO Portfolios (user_id, asset_id, total_amount, avg_cost) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_amount = ?, avg_cost = ?")->execute([$current_user_id, $asset_id, $amount, $asset['current_price'], $new_amount, $new_avg_cost]);
+                        
+                        $trade_message = "<div class='alert alert-success bg-success text-light border-0 mb-3'>🎉 成功買入 {$amount} 單位 {$asset['symbol']}！</div>";
                     } else {
                         throw new Exception("餘額不足！需要 $ " . number_format($total_value, 2));
                     }
 
                 } elseif ($action === 'sell') {
                     // 【賣出邏輯】
-                    $stmt = $pdo->prepare("SELECT total_amount FROM Portfolios WHERE user_id = ? AND asset_id = ?");
+                    $stmt = $pdo->prepare("SELECT total_amount FROM Portfolios WHERE user_id = ? AND asset_id = ? FOR UPDATE");
                     $stmt->execute([$current_user_id, $asset_id]);
                     $portfolio = $stmt->fetch(PDO::FETCH_ASSOC);
 
                     if ($portfolio && $portfolio['total_amount'] >= $amount) {
+                        // 賣出不會改變平均成本，只會減少數量
                         $pdo->prepare("UPDATE Portfolios SET total_amount = total_amount - ? WHERE user_id = ? AND asset_id = ?")->execute([$amount, $current_user_id, $asset_id]);
                         $pdo->prepare("INSERT INTO Transactions (user_id, asset_id, tx_type, amount, price_at_tx, total_value) VALUES (?, ?, 'sell', ?, ?, ?)")->execute([$current_user_id, $asset_id, $amount, $asset['current_price'], $total_value]);
                         $pdo->prepare("UPDATE Users SET balance = balance + ? WHERE user_id = ?")->execute([$total_value, $current_user_id]);
-                        $trade_message = "<div class='alert alert-info bg-info text-dark border-0 mb-3 alert-dismissible fade show'>💰 成功賣出 {$amount} 單位 {$asset['symbol']}，獲得 $ " . number_format($total_value, 2) . "！</div>";
+                        
+                        $trade_message = "<div class='alert alert-info bg-info text-dark border-0 mb-3'>💰 成功賣出 {$amount} 單位 {$asset['symbol']}！</div>";
                     } else {
                         throw new Exception("庫存不足！你沒有足夠的 {$asset['symbol']} 可以賣出。");
                     }
@@ -110,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $pdo->commit();
             } catch (Exception $e) {
                 $pdo->rollBack();
-                $trade_message = "<div class='alert alert-danger bg-danger text-light border-0 mb-3 alert-dismissible fade show'>❌ 交易失敗: " . $e->getMessage() . "</div>";
+                $trade_message = "<div class='alert alert-danger bg-danger text-light border-0 mb-3'>❌ 交易失敗: " . $e->getMessage() . "</div>";
             }
         }
     }
@@ -175,12 +191,19 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$current_user_id]);
 $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-// 🚀 新增這裡：找回被我不小心刪掉的「持倉數量」查詢邏輯！
-$stmt = $pdo->prepare("SELECT asset_id, total_amount FROM Portfolios WHERE user_id = ?");
+// 🚀 新增這裡：撈取詳細的「投資組合」資料，計算未實現損益
+$stmt = $pdo->prepare("
+    SELECT P.asset_id, P.total_amount, P.avg_cost, A.symbol, A.name, A.current_price 
+    FROM Portfolios P 
+    JOIN Assets A ON P.asset_id = A.asset_id 
+    WHERE P.user_id = ? AND P.total_amount > 0
+");
 $stmt->execute([$current_user_id]);
-$portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$active_portfolios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// 為了給左側列表顯示與 JS 使用的簡化陣列
 $my_holdings = [];
-foreach ($portfolios as $p) {
+foreach ($active_portfolios as $p) {
     $my_holdings[$p['asset_id']] = $p['total_amount'];
 }
 ?>
@@ -416,6 +439,51 @@ foreach ($portfolios as $p) {
         </div>
     </div>
     <div class="card p-4 mb-4">
+        <h5 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>我的投資組合 (Unrealized PnL)</h5>
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead class="text-secondary small">
+                    <tr>
+                        <th>標的</th>
+                        <th>持倉數量</th>
+                        <th>平均成本</th>
+                        <th>當前市價</th>
+                        <th>未實現損益 (USDT)</th>
+                        <th>報酬率 (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if(empty($active_portfolios)): ?>
+                        <tr><td colspan="6" class="text-center text-secondary py-4">目前尚無任何持倉</td></tr>
+                    <?php else: ?>
+                        <?php foreach ($active_portfolios as $port): 
+                            $cost_val = $port['total_amount'] * $port['avg_cost'];
+                            $current_val = $port['total_amount'] * $port['current_price'];
+                            $pnl = $current_val - $cost_val;
+                            $pnl_percent = ($cost_val > 0) ? ($pnl / $cost_val) * 100 : 0;
+                            
+                            $pnl_class = ($pnl >= 0) ? 'text-success' : 'text-danger';
+                            $pnl_sign = ($pnl >= 0) ? '+' : '';
+                        ?>
+                            <tr id="portfolio-row-<?= strtolower($port['symbol']) ?>" 
+                                data-amount="<?= $port['total_amount'] ?>" 
+                                data-cost="<?= $port['avg_cost'] ?>">
+                                <td>
+                                    <div class="fw-bold text-light"><?= htmlspecialchars($port['symbol']) ?></div>
+                                </td>
+                                <td class="fw-bold"><?= number_format($port['total_amount'], 4) ?></td>
+                                <td class="text-secondary">$ <?= number_format($port['avg_cost'], 4) ?></td>
+                                <td class="current-price fw-bold">$ <?= number_format($port['current_price'], 4) ?></td>
+                                <td class="pnl-amount fw-bold <?= $pnl_class ?>"><?= $pnl_sign ?>$ <?= number_format($pnl, 2) ?></td>
+                                <td class="pnl-percent fw-bold <?= $pnl_class ?>"><?= $pnl_sign ?><?= number_format($pnl_percent, 2) ?> %</td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card p-4 mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="fw-bold mb-0"><i class="bi bi-clock-history me-2 text-warning"></i>近期交易明細</h5>
         
@@ -579,7 +647,7 @@ foreach ($portfolios as $p) {
             };
         }
 
-        // 5. 更新大字看板報價與顏色閃爍效果
+        // 5. 更新大字看板報價與顏色閃爍效果 (加上即時計算損益！)
         function updatePriceUI(price) {
             const priceEl = document.getElementById('active-price');
             const sidebarPriceEl = document.getElementById(`price-val-${currentAssetId}`);
@@ -599,6 +667,30 @@ foreach ($portfolios as $p) {
             
             document.getElementById('est-price').innerText = '$ ' + price.toFixed(2);
             calculateTotal();
+
+            // 🚀 核心：即時尋找投資組合列表中對應的列，並重新計算 PnL
+            const portfolioRow = document.getElementById(`portfolio-row-${currentSymbol.toLowerCase()}`);
+            if (portfolioRow) {
+                const amount = parseFloat(portfolioRow.getAttribute('data-amount'));
+                const avgCost = parseFloat(portfolioRow.getAttribute('data-cost'));
+                
+                const pnl = (price - avgCost) * amount;
+                const pnlPercent = (avgCost > 0) ? (pnl / (amount * avgCost)) * 100 : 0;
+
+                const isProfit = pnl >= 0;
+                const sign = isProfit ? '+' : '-';
+                const colorClass = isProfit ? 'text-success' : 'text-danger';
+
+                portfolioRow.querySelector('.current-price').innerText = '$ ' + price.toFixed(4);
+                
+                const pnlAmountEl = portfolioRow.querySelector('.pnl-amount');
+                pnlAmountEl.className = `pnl-amount fw-bold ${colorClass}`;
+                pnlAmountEl.innerText = `${sign}$ ${Math.abs(pnl).toFixed(2)}`;
+
+                const pnlPercentEl = portfolioRow.querySelector('.pnl-percent');
+                pnlPercentEl.className = `pnl-percent fw-bold ${colorClass}`;
+                pnlPercentEl.innerText = `${sign}${Math.abs(pnlPercent).toFixed(2)} %`;
+            }
         }
 
         // 6. 計算預估總額表單連動
