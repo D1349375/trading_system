@@ -61,66 +61,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
 
-    // 🚀 分流二：處理「買入」或「賣出」
+    // 🚀 分流二：處理「買入(開多倉)」或「賣出(平多倉)」- 支援現貨/合約分離
     elseif ($action === 'buy' || $action === 'sell') {
         $asset_id = isset($_POST['asset_id']) ? (int)$_POST['asset_id'] : 0;
         $amount = isset($_POST['amount']) ? (float)$_POST['amount'] : 0;
+        $leverage = isset($_POST['leverage']) ? (int)$_POST['leverage'] : 1;
+        
+        // 🌟 新增：接收前端傳來的交易模式 (spot 或是 futures)
+        $trade_mode = isset($_POST['trade_mode']) ? $_POST['trade_mode'] : 'spot';
 
         if ($amount > 0) {
             try {
                 $pdo->beginTransaction();
-
                 $stmt = $pdo->prepare("SELECT current_price, symbol FROM Assets WHERE asset_id = ? AND status = 'trading'");
                 $stmt->execute([$asset_id]);
                 $asset = $stmt->fetch(PDO::FETCH_ASSOC);
                 
                 if (!$asset) { throw new Exception("找不到該資產或已下架"); }
-                $total_value = $asset['current_price'] * $amount;
+                
+                $notional_value = $asset['current_price'] * $amount;
+                $required_margin = $notional_value / $leverage;
 
                 if ($action === 'buy') {
-                    // 【買入邏輯】
+                    // 【開倉/買入邏輯】
                     $stmt = $pdo->prepare("SELECT balance FROM Users WHERE user_id = ? FOR UPDATE");
                     $stmt->execute([$current_user_id]);
                     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                    if ($user['balance'] >= $total_value) {
-                        // 🚀 核心升級：計算新的「平均持倉成本」
-                        $stmt = $pdo->prepare("SELECT total_amount, avg_cost FROM Portfolios WHERE user_id = ? AND asset_id = ?");
-                        $stmt->execute([$current_user_id, $asset_id]);
+                    if ($user['balance'] >= $required_margin) {
+                        // 🌟 修改點 1：尋找舊持倉時，加上 AND trade_mode = ?
+                        $stmt = $pdo->prepare("SELECT * FROM Portfolios WHERE user_id = ? AND asset_id = ? AND trade_mode = ?");
+                        $stmt->execute([$current_user_id, $asset_id, $trade_mode]);
                         $port = $stmt->fetch(PDO::FETCH_ASSOC);
                         
-                        $old_amount = $port ? (float)$port['total_amount'] : 0;
+                        $old_amt = $port ? (float)$port['total_amount'] : 0;
                         $old_cost = $port ? (float)$port['avg_cost'] : 0;
-                        $new_amount = $old_amount + $amount;
-                        // 公式：(原本總價值 + 這次買入總價值) / 買入後總數量
-                        $new_avg_cost = (($old_amount * $old_cost) + $total_value) / $new_amount;
+                        $old_margin = $port ? (float)$port['margin'] : 0;
+                        
+                        $new_amt = $old_amt + $amount;
+                        $new_cost = (($old_amt * $old_cost) + $notional_value) / $new_amt;
+                        $new_margin = $old_margin + $required_margin;
+                        $new_leverage = ($new_amt * $new_cost) / $new_margin;
+                        
+                        $mmr = 0.005; 
+                        $liq_price = $new_cost * (1 - (1 / $new_leverage) + $mmr);
 
-                        $pdo->prepare("UPDATE Users SET balance = balance - ? WHERE user_id = ?")->execute([$total_value, $current_user_id]);
-                        $pdo->prepare("INSERT INTO Transactions (user_id, asset_id, tx_type, amount, price_at_tx, total_value) VALUES (?, ?, 'buy', ?, ?, ?)")->execute([$current_user_id, $asset_id, $amount, $asset['current_price'], $total_value]);
+                        $pdo->prepare("UPDATE Users SET balance = balance - ? WHERE user_id = ?")->execute([$required_margin, $current_user_id]);
                         
-                        // 寫入/更新持倉與平均成本
-                        $pdo->prepare("INSERT INTO Portfolios (user_id, asset_id, total_amount, avg_cost) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_amount = ?, avg_cost = ?")->execute([$current_user_id, $asset_id, $amount, $asset['current_price'], $new_amount, $new_avg_cost]);
+                        // 🌟 修改點 2：寫入 Transactions 時，多塞入 trade_mode 欄位與變數
+                        $pdo->prepare("INSERT INTO Transactions (user_id, asset_id, trade_mode, tx_type, amount, price_at_tx, total_value) VALUES (?, ?, ?, 'buy', ?, ?, ?)")
+                            ->execute([$current_user_id, $asset_id, $trade_mode, $amount, $asset['current_price'], $required_margin]);
                         
-                        $trade_message = "<div class='alert alert-success bg-success text-light border-0 mb-3'>🎉 成功買入 {$amount} 單位 {$asset['symbol']}！</div>";
+                        // 🌟 修改點 3：寫入 Portfolios 時，多塞入 trade_mode 欄位與變數
+                        $pdo->prepare("INSERT INTO Portfolios (user_id, asset_id, trade_mode, total_amount, avg_cost, leverage, margin, liquidation_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE total_amount = ?, avg_cost = ?, leverage = ?, margin = ?, liquidation_price = ?")
+                            ->execute([$current_user_id, $asset_id, $trade_mode, $amount, $asset['current_price'], $leverage, $required_margin, $liq_price, $new_amt, $new_cost, $new_leverage, $new_margin, $liq_price]);
+                        
+                        $mode_text = $trade_mode === 'spot' ? '現貨' : '合約';
+                        $trade_message = "<div class='alert alert-success bg-success text-light border-0 mb-3'>🎉 成功買入 {$mode_text}！扣除金額/保證金 $ " . number_format($required_margin, 2) . "</div>";
                     } else {
-                        throw new Exception("餘額不足！需要 $ " . number_format($total_value, 2));
+                        throw new Exception("可用餘額不足！需要 $ " . number_format($required_margin, 2));
                     }
 
                 } elseif ($action === 'sell') {
-                    // 【賣出邏輯】
-                    $stmt = $pdo->prepare("SELECT total_amount FROM Portfolios WHERE user_id = ? AND asset_id = ? FOR UPDATE");
-                    $stmt->execute([$current_user_id, $asset_id]);
-                    $portfolio = $stmt->fetch(PDO::FETCH_ASSOC);
+                    // 【平倉/賣出邏輯】
+                    // 🌟 修改點 4：鎖定持倉時，加上 AND trade_mode = ?
+                    $stmt = $pdo->prepare("SELECT * FROM Portfolios WHERE user_id = ? AND asset_id = ? AND trade_mode = ? FOR UPDATE");
+                    $stmt->execute([$current_user_id, $asset_id, $trade_mode]);
+                    $port = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                    if ($portfolio && $portfolio['total_amount'] >= $amount) {
-                        // 賣出不會改變平均成本，只會減少數量
-                        $pdo->prepare("UPDATE Portfolios SET total_amount = total_amount - ? WHERE user_id = ? AND asset_id = ?")->execute([$amount, $current_user_id, $asset_id]);
-                        $pdo->prepare("INSERT INTO Transactions (user_id, asset_id, tx_type, amount, price_at_tx, total_value) VALUES (?, ?, 'sell', ?, ?, ?)")->execute([$current_user_id, $asset_id, $amount, $asset['current_price'], $total_value]);
-                        $pdo->prepare("UPDATE Users SET balance = balance + ? WHERE user_id = ?")->execute([$total_value, $current_user_id]);
+                    if ($port && $port['total_amount'] >= $amount) {
+                        $close_ratio = $amount / $port['total_amount'];
                         
-                        $trade_message = "<div class='alert alert-info bg-info text-dark border-0 mb-3'>💰 成功賣出 {$amount} 單位 {$asset['symbol']}！</div>";
+                        $margin_returned = $port['margin'] * $close_ratio; 
+                        $pnl = ($asset['current_price'] - $port['avg_cost']) * $amount; 
+                        
+                        $total_return = $margin_returned + $pnl; 
+                        $total_return = max(0, $total_return);
+
+                        // 🌟 修改點 5：更新持倉時，加上 AND trade_mode = ?
+                        $pdo->prepare("UPDATE Portfolios SET total_amount = total_amount - ?, margin = margin - ? WHERE user_id = ? AND asset_id = ? AND trade_mode = ?")
+                            ->execute([$amount, $margin_returned, $current_user_id, $asset_id, $trade_mode]);
+                            
+                        // 🌟 修改點 6：寫入交易紀錄時，多塞入 trade_mode 欄位與變數
+                        $pdo->prepare("INSERT INTO Transactions (user_id, asset_id, trade_mode, tx_type, amount, price_at_tx, total_value) VALUES (?, ?, ?, 'sell', ?, ?, ?)")
+                            ->execute([$current_user_id, $asset_id, $trade_mode, $amount, $asset['current_price'], $total_return]);
+                            
+                        $pdo->prepare("UPDATE Users SET balance = balance + ? WHERE user_id = ?")->execute([$total_return, $current_user_id]);
+                        
+                        // 🌟 修改點 7：全數平倉刪除殘留紀錄時，加上 AND trade_mode = ?
+                        if (($port['total_amount'] - $amount) < 0.000001) {
+                            $pdo->prepare("DELETE FROM Portfolios WHERE user_id = ? AND asset_id = ? AND trade_mode = ?")
+                                ->execute([$current_user_id, $asset_id, $trade_mode]);
+                        }
+                        
+                        $pnl_msg = $pnl >= 0 ? "+$ " . number_format($pnl, 2) : "-$ " . number_format(abs($pnl), 2);
+                        $trade_message = "<div class='alert alert-info bg-info text-dark border-0 mb-3'>💰 成功平倉！退回金額 $ " . number_format($margin_returned, 2) . "，損益：{$pnl_msg}</div>";
                     } else {
-                        throw new Exception("庫存不足！你沒有足夠的 {$asset['symbol']} 可以賣出。");
+                        throw new Exception("該模式(現貨/合約)的庫存部位不足！");
                     }
                 }
                 $pdo->commit();
@@ -193,7 +230,7 @@ $stmt->execute([$current_user_id]);
 $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // 🚀 新增這裡：撈取詳細的「投資組合」資料，計算未實現損益
 $stmt = $pdo->prepare("
-    SELECT P.asset_id, P.total_amount, P.avg_cost, A.symbol, A.name, A.current_price 
+    SELECT P.asset_id, P.total_amount, P.avg_cost, P.trade_mode, P.liquidation_price, A.symbol, A.name, A.current_price 
     FROM Portfolios P 
     JOIN Assets A ON P.asset_id = A.asset_id 
     WHERE P.user_id = ? AND P.total_amount > 0
@@ -217,6 +254,15 @@ foreach ($active_portfolios as $p) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
+        /* 隱藏數字輸入框的上下箭頭 (Spinners) */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
         body { background-color: #0c0d10; color: #eaecef; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         .navbar { background-color: #161a1e !important; border-bottom: 1px solid #2f3336; }
         /* 左側邊欄：獨立滾動與黏滯定位 */
@@ -389,23 +435,45 @@ foreach ($active_portfolios as $p) {
         <form method="POST" action="" id="trade-form">
             <input type="hidden" name="action" id="form-action" value="buy">
             <input type="hidden" name="asset_id" id="form-asset-id" value="1">
+            <input type="hidden" name="trade_mode" id="form-trade-mode" value="spot"> <input type="hidden" name="amount" id="hidden-actual-amount" value="0"> <ul class="nav nav-pills nav-fill mb-3 bg-dark p-1 rounded border border-secondary border-opacity-25" style="font-size: 0.9rem;">
+                <li class="nav-item">
+                    <a class="nav-link active fw-bold text-light bg-secondary bg-opacity-25" id="tab-spot" href="#" onclick="switchTradeMode('spot', event)">現貨 (Spot)</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link fw-bold text-secondary" id="tab-futures" href="#" onclick="switchTradeMode('futures', event)">U本位合約</a>
+                </li>
+            </ul>
 
             <div class="btn-group w-100 mb-3" role="group">
-                <input type="radio" class="btn-check" name="btnradio" id="btn-buy-tab" autocomplete="off" checked onclick="setTradeMode('buy')">
+                <input type="radio" class="btn-check" name="btnradio" id="btn-buy-tab" autocomplete="off" checked onclick="setTradeDirection('buy')">
                 <label class="btn btn-outline-success fw-bold" for="btn-buy-tab">買入 (Buy)</label>
 
-                <input type="radio" class="btn-check" name="btnradio" id="btn-sell-tab" autocomplete="off" onclick="setTradeMode('sell')">
+                <input type="radio" class="btn-check" name="btnradio" id="btn-sell-tab" autocomplete="off" onclick="setTradeDirection('sell')">
                 <label class="btn btn-outline-danger fw-bold" for="btn-sell-tab">賣出 (Sell)</label>
             </div>
 
             <div class="mb-3">
                 <label class="form-label text-secondary small fw-bold d-flex justify-content-between">
-                    <span>委託數量</span>
+                    <span>委託數量 / 價值</span>
                     <span id="holding-hint" class="text-info" style="cursor: pointer;" onclick="fillMaxAmount()">可用持倉: 0.00</span>
                 </label>
                 <div class="input-group">
-                    <input type="number" step="0.0001" min="0.0001" class="form-control trading-input fs-5" name="amount" id="trade-amount" placeholder="0.00" oninput="calculateTotal()" required>
-                    <span class="input-group-text trading-input fw-bold" id="amount-unit">BTC</span>
+                    <input type="number" step="0.000001" min="0.000001" class="form-control trading-input fs-5" id="ui-trade-input" placeholder="0.00" oninput="calculateTotal()" required>
+                    <button class="btn btn-secondary fw-bold border-secondary text-light" type="button" id="unit-toggle-btn" onclick="toggleInputUnit()">BTC</button>
+                </div>
+            </div>
+
+            <div class="mb-3" id="leverage-container" style="display: none;">
+                <label class="form-label text-secondary small fw-bold d-flex justify-content-between">
+                    <span>槓桿倍數 (Leverage)</span>
+                    <span id="leverage-display" class="text-warning">1x</span>
+                </label>
+                <div class="d-flex align-items-center bg-dark p-2 rounded border border-secondary border-opacity-50">
+                    <input type="range" class="form-range flex-grow-1 me-3" id="leverage-slider" min="1" max="100" step="1" value="1" oninput="syncLeverage(this.value, 'slider')">
+                    <div class="input-group input-group-sm" style="width: 70px;">
+                        <input type="number" class="form-control trading-input text-center text-warning fw-bold px-1" id="leverage-input" name="leverage" min="1" max="100" value="1" oninput="syncLeverage(this.value, 'input')">
+                        <span class="input-group-text trading-input px-1">x</span>
+                    </div>
                 </div>
             </div>
 
@@ -415,46 +483,42 @@ foreach ($active_portfolios as $p) {
                     <span id="est-price">$ 0.00</span>
                 </div>
                 <div class="d-flex justify-content-between fw-bold fs-5 text-light border-top border-secondary border-opacity-25 pt-2 mt-2">
-                    <span>預估總額:</span>
+                    <span id="est-label-text">所需保證金:</span>
                     <span class="text-warning" id="est-total">$ 0.00</span>
                 </div>
             </div>
             
-            <button type="submit" class="btn btn-buy w-100 py-3 fs-5 shadow-sm" id="submit-btn"><i class="bi bi-box-arrow-in-right me-2"></i>執行買入委託</button>
+            <button type="submit" class="btn btn-buy w-100 py-3 fs-5 shadow-sm" id="submit-btn"><i class="bi bi-box-arrow-in-right me-2"></i>執行現貨買入</button>
         </form>
     </div>
     <div class="text-secondary small text-center mt-3 border-top border-secondary border-opacity-25 pt-2">
         <i class="bi bi-shield-check me-1 text-success"></i> 已啟用 SSL 加密防護與安全網關
     </div>
-</div>
-                            </div>
-                            <div class="text-secondary small text-center mt-3 border-top border-secondary border-opacity-25 pt-2">
-                                <i class="bi bi-shield-check me-1 text-success"></i> 已啟用 SSL 加密防護與安全網關
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
+</div> </div> </div> <div class="card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>我的投資組合 (Unrealized PnL)</h5>
+            
+            <ul class="nav nav-pills bg-dark p-1 rounded border border-secondary border-opacity-25" style="font-size: 0.8rem;">
+                <li class="nav-item"><a class="nav-link active py-1 px-2 text-light bg-secondary bg-opacity-25" id="pnl-tab-spot" href="#" onclick="filterPnlTable('spot', event)">現貨部位</a></li>
+                <li class="nav-item"><a class="nav-link text-secondary py-1 px-2" id="pnl-tab-futures" href="#" onclick="filterPnlTable('futures', event)">合約部位</a></li>
+            </ul>
         </div>
-    </div>
-    <div class="card p-4 mb-4">
-        <h5 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>我的投資組合 (Unrealized PnL)</h5>
         <div class="table-responsive">
             <table class="table table-dark table-hover align-middle mb-0">
                 <thead class="text-secondary small">
                     <tr>
                         <th>標的</th>
+                        <th>模式</th>
                         <th>持倉數量</th>
                         <th>平均成本</th>
-                        <th>當前市價</th>
+                        <th>預估強平價 (爆倉)</th> <th>當前市價</th>
                         <th>未實現損益 (USDT)</th>
                         <th>報酬率 (%)</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if(empty($active_portfolios)): ?>
-                        <tr><td colspan="6" class="text-center text-secondary py-4">目前尚無任何持倉</td></tr>
+                        <tr><td colspan="8" class="text-center text-secondary py-4">目前尚無任何持倉</td></tr>
                     <?php else: ?>
                         <?php foreach ($active_portfolios as $port): 
                             $cost_val = $port['total_amount'] * $port['avg_cost'];
@@ -464,15 +528,24 @@ foreach ($active_portfolios as $p) {
                             
                             $pnl_class = ($pnl >= 0) ? 'text-success' : 'text-danger';
                             $pnl_sign = ($pnl >= 0) ? '+' : '';
+                            $mode_badge = ($port['trade_mode'] === 'futures') ? '<span class="badge bg-warning text-dark">合約</span>' : '<span class="badge bg-secondary">現貨</span>';
                         ?>
-                            <tr id="portfolio-row-<?= strtolower($port['symbol']) ?>" 
+                            <tr class="portfolio-row" 
+                                data-mode="<?= $port['trade_mode'] ?>"
+                                data-symbol="<?= strtolower($port['symbol']) ?>" 
                                 data-amount="<?= $port['total_amount'] ?>" 
                                 data-cost="<?= $port['avg_cost'] ?>">
                                 <td>
                                     <div class="fw-bold text-light"><?= htmlspecialchars($port['symbol']) ?></div>
                                 </td>
+                                <td><?= $mode_badge ?></td>
                                 <td class="fw-bold"><?= number_format($port['total_amount'], 4) ?></td>
                                 <td class="text-secondary">$ <?= number_format($port['avg_cost'], 4) ?></td>
+                                
+                                <td class="text-warning fw-bold">
+                                    <?= $port['trade_mode'] === 'futures' ? '$ ' . number_format($port['liquidation_price'], 4) : '<span class="text-secondary opacity-50">無 (現貨)</span>' ?>
+                                </td>
+                                
                                 <td class="current-price fw-bold">$ <?= number_format($port['current_price'], 4) ?></td>
                                 <td class="pnl-amount fw-bold <?= $pnl_class ?>"><?= $pnl_sign ?>$ <?= number_format($pnl, 2) ?></td>
                                 <td class="pnl-percent fw-bold <?= $pnl_class ?>"><?= $pnl_sign ?><?= number_format($pnl_percent, 2) ?> %</td>
@@ -535,13 +608,16 @@ foreach ($active_portfolios as $p) {
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
     
     <script>
-        // 全域狀態管理
+        // ==========================================
+        // 全域狀態管理與變數宣告 (🚀 核心修復區)
+        // ==========================================
         let currentAssetId = 1;
+        let currentSymbol = 'btcusdt'; // 🚀 修復 1：補上遺失的全域變數，防止系統崩潰！
         let currentInterval = '1m';
         let currentPrice = 0;
         let binanceSocket = null;
-
-        
+        let currentTradeMode = 'spot'; // 🚀 修復 2：把這兩個變數移到最上方，確保初始化時就存在
+        let inputUnitMode = 'amount';  
 
         // 1. 初始化 TradingView Lightweight Chart
         const chart = LightweightCharts.createChart(document.getElementById('tvchart'), {
@@ -557,61 +633,55 @@ foreach ($active_portfolios as $p) {
         // 🚀 修正一：動態切換商品標題與下單單位
         function selectAsset(assetId) {
             currentAssetId = assetId;
-            
-            // 🚀 加上這行：讓隱藏的下單表單知道現在切換到哪一個商品了！
             document.getElementById('form-asset-id').value = assetId;
             
-            // 1. 處理左側列表的 Active 亮燈效果
-            document.querySelectorAll('.asset-item').forEach(el => el.classList.remove('active'));
-            
-            // 1. 處理左側列表的 Active 亮燈效果
+            // 處理左側列表的 Active 亮燈效果 (已清理重複代碼)
             document.querySelectorAll('.asset-item').forEach(el => el.classList.remove('active'));
             const selectedEl = document.querySelector(`.asset-item[data-id='${assetId}']`);
             if (selectedEl) selectedEl.classList.add('active');
 
-            // 2. 取得商品代碼與名稱
+            // 取得商品代碼與名稱
             currentSymbol = selectedEl.getAttribute('data-symbol');
             const assetName = selectedEl.getAttribute('data-name');
             
-            // 3. 動態更新上方大看板 (是加密貨幣才加 /USDT)
-            const displaySymbol = currentSymbol.includes('USDT') ? currentSymbol.replace('USDT', '/USDT') : currentSymbol;
+            const displaySymbol = currentSymbol.includes('USDT') ? currentSymbol.replace('USDT', '/USDT') : currentSymbol.toUpperCase();
             document.getElementById('active-asset').innerHTML = `${displaySymbol} <span class="fs-6 text-secondary ms-2">${assetName}</span>`;
             
-            // 4. 動態更新右側委託單的「單位」
-            const unitName = currentSymbol.replace('USDT', '');
-            document.getElementById('amount-unit').innerText = unitName;
+            // 動態更新下單單位的按鈕文字
+            document.getElementById('unit-toggle-btn').innerText = (inputUnitMode === 'amount') ? currentSymbol.replace('USDT', '').toUpperCase() : 'USDT';
 
-            // 5. 重新載入圖表與持倉
             fetchKlinesAndDraw('1m'); 
             updateHoldingHint();
         }
 
-        // 🚀 修正二：加入「快取破壞者」與「休市防呆機制」
+        // 🚀 修正二：加入「圖表崩潰自動救援」的終極防護
         async function fetchKlinesAndDraw(interval) {
             try {
-                // 💡 在網址後面加上 &t=${Date.now()}，強制瀏覽器每次都抓最新資料，無視幽靈快取！
                 const response = await fetch(`api_klines.php?asset_id=${currentAssetId}&interval=${interval}&t=${Date.now()}`);
+                if (!response.ok) throw new Error("API 伺服器錯誤");
+                
                 const klineData = await response.json();
 
                 if (klineData && klineData.length > 0) {
-                    // 有資料：正常畫圖並更新最新價格
                     candleSeries.setData(klineData);
                     chart.timeScale().fitContent();
                     
                     const lastPrice = klineData[klineData.length - 1].close;
                     updatePriceUI(lastPrice);
                 } else {
-                    // 沒資料 (例如美股未開盤)：清空圖表，但從左側列表抓取歷史收盤價，防止價格變 $ 0.00
-                    candleSeries.setData([]); 
-                    const sidebarPriceStr = document.getElementById(`price-val-${currentAssetId}`).innerText.replace('$', '').replace(/,/g, '');
-                    updatePriceUI(parseFloat(sidebarPriceStr) || 0);
+                    throw new Error("API 傳回空資料");
                 }
                 
                 startRealtimeUpdates(interval);
                 resetChartViewport();
                 
             } catch (error) {
-                console.error("K線載入失敗:", error);
+                console.error("K線載入失敗，啟動救援機制:", error);
+                // 🛡️ 核心修復：就算圖表壞了或沒資料，強制從側邊欄抓取「最新價格」塞進系統
+                // 這樣一來 currentPrice 就不會是 0，算保證金跟下單就絕對不會失效！
+                candleSeries.setData([]); 
+                const sidebarPriceStr = document.getElementById(`price-val-${currentAssetId}`).innerText.replace('$', '').replace(/,/g, '');
+                updatePriceUI(parseFloat(sidebarPriceStr) || 0);
             }
         }
 
@@ -667,10 +737,10 @@ foreach ($active_portfolios as $p) {
             
             document.getElementById('est-price').innerText = '$ ' + price.toFixed(2);
             calculateTotal();
-
-            // 🚀 核心：即時尋找投資組合列表中對應的列，並重新計算 PnL
-            const portfolioRow = document.getElementById(`portfolio-row-${currentSymbol.toLowerCase()}`);
-            if (portfolioRow) {
+            
+            // 🚀 核心：即時尋找投資組合列表中對應的列，並重新計算 PnL (支援同時更新現貨與合約行)
+            const rows = document.querySelectorAll(`.portfolio-row[data-symbol="${currentSymbol.toLowerCase()}"]`);
+            rows.forEach(portfolioRow => {
                 const amount = parseFloat(portfolioRow.getAttribute('data-amount'));
                 const avgCost = parseFloat(portfolioRow.getAttribute('data-cost'));
                 
@@ -690,16 +760,24 @@ foreach ($active_portfolios as $p) {
                 const pnlPercentEl = portfolioRow.querySelector('.pnl-percent');
                 pnlPercentEl.className = `pnl-percent fw-bold ${colorClass}`;
                 pnlPercentEl.innerText = `${sign}${Math.abs(pnlPercent).toFixed(2)} %`;
+            });
+        }
+        // 槓桿聯動邏輯
+        function syncLeverage(val, source) {
+            let leverage = parseInt(val);
+            if (isNaN(leverage) || leverage < 1) leverage = 1;
+            if (leverage > 100) leverage = 100;
+
+            if (source === 'slider') {
+                document.getElementById('leverage-input').value = leverage;
+            } else {
+                document.getElementById('leverage-slider').value = leverage;
             }
+            document.getElementById('leverage-display').innerText = leverage + 'x';
+            calculateTotal(); // 每次拉動槓桿都重新計算所需保證金
         }
 
-        // 6. 計算預估總額表單連動
-        function calculateTotal() {
-            const amount = parseFloat(document.getElementById('trade-amount').value) || 0;
-            const total = amount * currentPrice;
-            document.getElementById('est-total').innerText = '$ ' + total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        }
-
+        
         // 🚀 新增：解鎖並自動重置圖表視窗（價格與時間軸同時收攏）
         function resetChartViewport() {
             // 1. 恢復價格軸的自動縮放（解鎖手動拉伸）
@@ -760,38 +838,151 @@ foreach ($active_portfolios as $p) {
         };
         // 將 PHP 的持倉陣列轉為 JS 物件，方便前端隨時查閱
         const myHoldings = <?= json_encode($my_holdings) ?>;
+        // ==========================================
+        // 交易表單與 UI 互動邏輯 (現貨合約全面升級版)
+        // ==========================================
+        
 
-        // 切換買/賣模式的 UI 邏輯
-        function setTradeMode(mode) {
-            document.getElementById('form-action').value = mode;
-            const btn = document.getElementById('submit-btn');
-            if (mode === 'buy') {
-                btn.className = "btn btn-success w-100 py-3 fs-5 shadow-sm";
-                btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>執行買入委託';
-            } else {
-                btn.className = "btn btn-danger w-100 py-3 fs-5 shadow-sm";
-                btn.innerHTML = '<i class="bi bi-box-arrow-right me-2"></i>執行賣出委託';
+        // 1. 現貨/合約 模式切換
+        function switchTradeMode(mode, event) {
+            if(event) event.preventDefault();
+            currentTradeMode = mode;
+            document.getElementById('form-trade-mode').value = mode;
+            
+            // UI 按鈕樣式切換
+            document.getElementById('tab-spot').className = (mode === 'spot') ? 'nav-link active fw-bold text-light bg-secondary bg-opacity-25' : 'nav-link fw-bold text-secondary';
+            document.getElementById('tab-futures').className = (mode === 'futures') ? 'nav-link active fw-bold text-light bg-secondary bg-opacity-25' : 'nav-link fw-bold text-secondary';
+            
+            // 隱藏/顯示槓桿拉桿
+            document.getElementById('leverage-container').style.display = (mode === 'futures') ? 'block' : 'none';
+            if(mode === 'spot') {
+                syncLeverage(1, 'input'); // 現貨強制 1 倍槓桿
             }
+            
+            updateSubmitBtnText();
             updateHoldingHint();
+            calculateTotal();
+            filterPnlTable(mode); // 切換下方損益表
         }
 
-        // 根據目前選定的資產，更新右上角的「可用持倉」文字
+        // 2. 買/賣 方向切換
+        function setTradeDirection(direction) {
+            document.getElementById('form-action').value = direction;
+            const btn = document.getElementById('submit-btn');
+            
+            if (direction === 'buy') {
+                btn.className = "btn btn-success w-100 py-3 fs-5 shadow-sm";
+            } else {
+                btn.className = "btn btn-danger w-100 py-3 fs-5 shadow-sm";
+            }
+            
+            updateSubmitBtnText();
+            updateHoldingHint();
+            calculateTotal();
+        }
+
+        // 3. 更新按鈕文字
+        function updateSubmitBtnText() {
+            const btn = document.getElementById('submit-btn');
+            const direction = document.getElementById('form-action').value;
+            const actionText = (direction === 'buy') ? '買入/做多' : '賣出/平倉';
+            const modeText = (currentTradeMode === 'spot') ? '現貨' : '合約';
+            const icon = (direction === 'buy') ? '<i class="bi bi-box-arrow-in-right me-2"></i>' : '<i class="bi bi-box-arrow-right me-2"></i>';
+            btn.innerHTML = `${icon}執行${modeText}${actionText}`;
+        }
+
+        // 4. 單位切換 (顆 vs USDT)
+        function toggleInputUnit() {
+            inputUnitMode = (inputUnitMode === 'amount') ? 'value' : 'amount';
+            const baseUnit = currentSymbol.replace('USDT', '').toUpperCase();
+            document.getElementById('unit-toggle-btn').innerText = (inputUnitMode === 'amount') ? baseUnit : 'USDT';
+            
+            // 清空輸入框避免換算混亂
+            document.getElementById('ui-trade-input').value = '';
+            calculateTotal();
+        }
+
+        // 5. 終極算價與保證金引擎
+        function calculateTotal() {
+            const rawVal = parseFloat(document.getElementById('ui-trade-input').value) || 0;
+            let actualAmount = 0;
+            let notionalValue = 0;
+
+            // 根據單位換算
+            if (inputUnitMode === 'amount') {
+                actualAmount = rawVal;
+                notionalValue = actualAmount * currentPrice;
+            } else {
+                notionalValue = rawVal;
+                actualAmount = (currentPrice > 0) ? (notionalValue / currentPrice) : 0;
+            }
+
+            // 將真實數量塞進隱藏欄位給後端
+            document.getElementById('hidden-actual-amount').value = actualAmount.toFixed(6);
+
+            const leverage = (currentTradeMode === 'futures') ? (parseInt(document.getElementById('leverage-input').value) || 1) : 1;
+            const requiredMargin = notionalValue / leverage;
+
+            // 更新預估金額顯示
+            document.getElementById('est-total').innerText = '$ ' + requiredMargin.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            
+            const direction = document.getElementById('form-action').value;
+            document.getElementById('est-label-text').innerText = (direction === 'buy') ? '所需保證金:' : '平倉預估拿回:';
+        }
+
+        // 6. 槓桿滑桿聯動
+        function syncLeverage(val, source) {
+            let leverage = parseInt(val);
+            if (isNaN(leverage) || leverage < 1) leverage = 1;
+            if (leverage > 100) leverage = 100;
+
+            if (source === 'slider') {
+                document.getElementById('leverage-input').value = leverage;
+            } else {
+                document.getElementById('leverage-slider').value = leverage;
+            }
+            document.getElementById('leverage-display').innerText = leverage + 'x';
+            calculateTotal(); // 每次拉動槓桿都重新計算
+        }
+
+        // 7. 更新右上角「可用持倉」文字
         function updateHoldingHint() {
             const amount = myHoldings[currentAssetId] || 0;
             document.getElementById('holding-hint').innerText = `可用持倉: ${parseFloat(amount).toFixed(4)}`;
         }
 
-        // 點擊「可用持倉」時，一鍵填入最大數量 (方便 All-in 或清倉)
+        // 8. 點擊「可用持倉」時填入最大數量
         function fillMaxAmount() {
             const amount = myHoldings[currentAssetId] || 0;
-            document.getElementById('trade-amount').value = parseFloat(amount).toFixed(4);
+            if (inputUnitMode === 'value') {
+                toggleInputUnit(); // 如果當前是價值模式，強制切回數量模式
+            }
+            document.getElementById('ui-trade-input').value = parseFloat(amount).toFixed(4);
             calculateTotal();
         }
-    
 
-        
+        // 9. 過濾下方 PnL 表格
+        function filterPnlTable(mode = currentTradeMode, event = null) {
+            if(event) event.preventDefault();
+            
+            const tabSpot = document.getElementById('pnl-tab-spot');
+            const tabFutures = document.getElementById('pnl-tab-futures');
+            
+            if (tabSpot && tabFutures) {
+                tabSpot.className = (mode === 'spot') ? 'nav-link active py-1 px-2 text-light bg-secondary bg-opacity-25' : 'nav-link text-secondary py-1 px-2';
+                tabFutures.className = (mode === 'futures') ? 'nav-link active py-1 px-2 text-light bg-secondary bg-opacity-25' : 'nav-link text-secondary py-1 px-2';
+            }
+            
+            document.querySelectorAll('.portfolio-row').forEach(row => {
+                if(row.getAttribute('data-mode') === mode) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
     </script>
-    </div> </div><div class="modal fade" id="fundsModal" tabindex="-1" aria-labelledby="fundsModalLabel" aria-hidden="true">
+            </div> </div> </div> <div class="modal fade" id="fundsModal" tabindex="-1" aria-labelledby="fundsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content bg-dark text-light border-secondary shadow-lg">
                 <div class="modal-header border-secondary border-opacity-50">
