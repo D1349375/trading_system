@@ -73,6 +73,7 @@
 打開終端機 (Terminal) 或命令提示字元 (CMD)，執行以下指令安裝背景引擎必備的 Python 套件：
 ```bash
 pip install requests pymysql yfinance
+```
 #### 步驟三：設定資料庫連線防呆
 確認專案中所有 PHP 檔案（如 `index.php`, `api_klines.php`, `login.php`）與 Python 檔案（`data_fetcher.py`, `liquidation_engine.py`）中的資料庫連線參數。預設（XAMPP）設定如下：
 * **Host**: `127.0.0.1`
