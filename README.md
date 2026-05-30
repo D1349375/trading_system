@@ -18,7 +18,7 @@
 ## ✨ 核心特色與技術亮點
 
 ### 1. 🚀 雙引擎數據中心 (`data_fetcher.py`)
-* **加密貨幣引擎**：對接 **Binance API**，暖機模式（Warm-up）下自動批次同步達 1000 筆多級別（1m, 15m, 1h, 4h, 1d）歷史 K 線資料，並在增量模式下自動每分鐘滾動提交（Commit），避免鎖表。
+* **加密貨幣引擎**：對接 **Binance API**，暖機模式（Warm-up）下自動批次同步達 1000 筆多級別（1m, 3m, 5m, 15m, 1h, 4h, 1d）歷史 K 線資料，並在增量模式下自動每分鐘滾動提交（Commit），避免鎖表。
 * **傳統股市引擎**：對接 **Yahoo Finance API**，動態相容台美股（如 TSM、NVDA）的開高低收與成交量數據。
 
 ### 2. 💀 獵殺爆倉清算引擎 (`liquidation_engine.py`)
@@ -68,6 +68,11 @@
    * Mac/Linux: `/Applications/XAMPP/htdocs/quant-terminal/`
 3. 開啟瀏覽器進入 [phpMyAdmin](http://localhost/phpmyadmin/)。
 4. 點選「匯入 (Import)」，選擇專案中的 `database_setup.sql` 檔案並執行，系統會自動建立 `crypto_trading_db` 資料庫及測試資料。
+
+💡 **開發環境替代方案 (無 XAMPP 適用)：**
+如果你的環境無法安裝 XAMPP 或 phpMyAdmin，請依照以下方式啟動：
+1. 資料庫：自行安裝 MySQL/MariaDB，並使用 **DBeaver** 或 **VS Code MySQL 套件** 連線，開啟 SQL 編輯器執行 `database_setup.sql`。
+2. 網頁伺服器：在專案根目錄開啟終端機，執行 `php -S localhost:8000`，即可使用 PHP 內建伺服器預覽專案。
 
 #### 步驟二：配置 Python 第三方依賴套件
 打開終端機 (Terminal) 或命令提示字元 (CMD)，執行以下指令安裝背景引擎必備的 Python 套件：
