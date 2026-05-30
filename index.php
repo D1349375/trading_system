@@ -213,7 +213,7 @@ $available_assets = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // --- 🔍 搜尋與分頁邏輯結束 ---
 
 // 讀取近期交易歷史
-$stmt = $pdo->prepare("SELECT t.*, a.symbol FROM Transactions t JOIN Assets a ON t.asset_id = a.asset_id WHERE t.user_id = ? ORDER BY T.created_at DESC LIMIT 5");
+$stmt = $pdo->prepare("SELECT t.*, a.symbol FROM Transactions t JOIN Assets a ON t.asset_id = a.asset_id WHERE t.user_id = ? ORDER BY t.created_at DESC LIMIT 5");
 $stmt->execute([$current_user_id]);
 $recent_transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -402,7 +402,7 @@ foreach ($active_portfolios as $p) {
                         </div>
                         <div class="btn-group btn-group-sm shadow-sm" role="group" id="timeframe-buttons">
                             <button type="button" class="btn btn-outline-secondary active timeframe-btn" onclick="changeTimeframe('1m')">1m</button>
-                            <button type="button" class="btn btn-outline-secondary timeframe-btn" onclick="changeTimeframe('15m')">15m</button>
+                            <button type="button" class="btn btn-outline-secondary timeframe-btn" onclick="changeTimeframe('3m')">3m</button> <button type="button" class="btn btn-outline-secondary timeframe-btn" onclick="changeTimeframe('5m')">5m</button> <button type="button" class="btn btn-outline-secondary timeframe-btn" onclick="changeTimeframe('15m')">15m</button>
                             <button type="button" class="btn btn-outline-secondary timeframe-btn" onclick="changeTimeframe('1h')">1H</button>
                             <button type="button" class="btn btn-outline-secondary timeframe-btn" onclick="changeTimeframe('4h')">4H</button>
                             <button type="button" class="btn btn-outline-secondary timeframe-btn" onclick="changeTimeframe('1d')">1D</button>
