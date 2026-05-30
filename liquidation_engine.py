@@ -17,7 +17,7 @@ def check_liquidations():
                 SELECT P.user_id, P.asset_id, P.total_amount, P.margin, A.symbol, A.current_price, P.liquidation_price
                 FROM Portfolios P
                 JOIN Assets A ON P.asset_id = A.asset_id
-                WHERE A.current_price <= P.liquidation_price AND P.total_amount > 0
+                WHERE A.current_price <= P.liquidation_price AND P.total_amount > 0 AND P.trade_mode = 'futures'
             """
             cursor.execute(sql)
             liquidated_positions = cursor.fetchall()
@@ -26,15 +26,15 @@ def check_liquidations():
                 user_id = pos['user_id']
                 asset_id = pos['asset_id']
                 
-                print(f"💀 [爆倉觸發] 帳號 {user_id} 的 {pos['symbol']} 跌破強平價 {pos['liquidation_price']:.2f} (市價: {pos['current_price']:.2f})")
+                print(f"💀 [爆倉觸發] 帳號 {user_id} 的 {pos['symbol']} 跌破強平價 {pos['liquidation_price']:.8f} (市價: {pos['current_price']:.8f})")
                 
-                # 1. 將該筆部位強制刪除 (保證金被系統沒收，不退回餘額)
-                cursor.execute("DELETE FROM Portfolios WHERE user_id = %s AND asset_id = %s", (user_id, asset_id))
+                # 1. 將該筆合約部位強制刪除 (保證金被系統沒收，不退回餘額)
+                cursor.execute("DELETE FROM Portfolios WHERE user_id = %s AND asset_id = %s AND trade_mode = 'futures'", (user_id, asset_id))
                 
-                # 2. 寫入一筆特殊的「強制平倉」紀錄 (total_value = 0 代表拿回 0 元)
+                # 2. 🚀 寫入一筆特殊的「強制平倉」紀錄 (明確標記 trade_mode 為 futures)
                 cursor.execute("""
-                    INSERT INTO Transactions (user_id, asset_id, tx_type, amount, price_at_tx, total_value) 
-                    VALUES (%s, %s, 'sell', %s, %s, 0)
+                    INSERT INTO Transactions (user_id, asset_id, trade_mode, tx_type, amount, price_at_tx, total_value) 
+                    VALUES (%s, %s, 'futures', 'sell', %s, %s, 0)
                 """, (user_id, asset_id, pos['total_amount'], pos['current_price']))
                 
             conn.commit()
@@ -45,7 +45,7 @@ def check_liquidations():
             conn.close()
 
 if __name__ == "__main__":
-    print("💀 獵殺引擎 (Liquidation Engine) 已啟動，24小時監控爆倉風險...")
+    print("💀 獵殺引擎 (Liquidation Engine) 已啟動，24小時精準監控合約爆倉風險...")
     while True:
         check_liquidations()
         time.sleep(5) # 每 5 秒掃描一次

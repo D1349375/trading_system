@@ -1,113 +1,105 @@
 -- ==============================================================================
--- 專案名稱：虛擬資產模擬交易與投資追蹤系統
--- 階段：Phase 2 - 資料庫 DDL 建置腳本 (適用於 MariaDB)
+-- 專案名稱：QUANT TERMINAL Pro - 虛擬資產模擬交易系統
+-- 階段：終極完整版 (包含合約欄位、高精度小數點、多時框 K 線、完整預設標的)
 -- ==============================================================================
 
 -- 1. 建立並切換至資料庫
 CREATE DATABASE IF NOT EXISTS `crypto_trading_db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `crypto_trading_db`;
 
--- ==============================================================================
--- [類別 1] 使用者資料表 (Users)
--- 負責帳號管理、角色權限、現金餘額控制
--- ==============================================================================
-CREATE TABLE `Users` (
+-- 2. 建立使用者資料表 (Users) - 支援 Email 與 Bcrypt 長密碼防截斷
+CREATE TABLE IF NOT EXISTS `Users` (
     `user_id` INT AUTO_INCREMENT PRIMARY KEY,
-    `username` VARCHAR(50) NOT NULL UNIQUE COMMENT '使用者帳號',
-    `password_hash` VARCHAR(255) NOT NULL COMMENT '密碼雜湊值 (建議 bcrypt)',
-    `role` ENUM('admin', 'member', 'guest') DEFAULT 'member' COMMENT '多身分角色區分',
-    `balance` DECIMAL(18, 4) DEFAULT 100000.0000 COMMENT '帳戶現金餘額 (預設給予十萬模擬金)',
-    `status` ENUM('active', 'suspended') DEFAULT 'active' COMMENT '帳號狀態 (停權機制)',
+    `username` VARCHAR(50) NOT NULL UNIQUE,
+    `email` VARCHAR(100) NOT NULL UNIQUE,
+    `password` VARCHAR(255) NOT NULL,
+    `role` ENUM('admin', 'member', 'guest') DEFAULT 'member',
+    `balance` DECIMAL(18, 4) DEFAULT 100000.0000,
+    `status` ENUM('active', 'suspended') DEFAULT 'active',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ==============================================================================
--- [類別 2] 核心業務資料表 (Assets)
--- 負責管理可交易的金融標的與「最新」報價
--- ==============================================================================
-CREATE TABLE `Assets` (
+-- 3. 建立資產資料表 (Assets)
+CREATE TABLE IF NOT EXISTS `Assets` (
     `asset_id` INT AUTO_INCREMENT PRIMARY KEY,
-    `symbol` VARCHAR(20) NOT NULL UNIQUE COMMENT '資產代號 (如 BTCUSDT, TSM)',
-    `name` VARCHAR(100) NOT NULL COMMENT '資產名稱',
-    `current_price` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000 COMMENT '當前最新報價',
-    `status` ENUM('trading', 'delisted') DEFAULT 'trading' COMMENT '上下架狀態 (軟刪除應用)',
+    `symbol` VARCHAR(20) NOT NULL UNIQUE,
+    `name` VARCHAR(100) NOT NULL,
+    `current_price` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000,
+    `status` ENUM('trading', 'delisted') DEFAULT 'trading',
     `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- ==============================================================================
--- [類別 3] 關聯橋接資料表 - 交易明細 (Transactions)
--- 紀錄誰 (User) 買賣了什麼 (Asset)，以及成交價格
--- ==============================================================================
-CREATE TABLE `Transactions` (
+-- 4. 建立交易明細 (Transactions) - 支援現貨與合約分流 (trade_mode)
+CREATE TABLE IF NOT EXISTS `Transactions` (
     `tx_id` INT AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT NOT NULL,
     `asset_id` INT NOT NULL,
-    `tx_type` ENUM('buy', 'sell') NOT NULL COMMENT '交易類別',
-    `amount` DECIMAL(18, 8) NOT NULL COMMENT '交易數量',
-    `price_at_tx` DECIMAL(18, 8) NOT NULL COMMENT '成交當下單價',
-    `total_value` DECIMAL(18, 4) NOT NULL COMMENT '總花費/獲得金額 (amount * price_at_tx)',
+    `trade_mode` VARCHAR(20) NOT NULL DEFAULT 'spot', 
+    `tx_type` ENUM('buy', 'sell') NOT NULL,
+    `amount` DECIMAL(18, 8) NOT NULL,
+    `price_at_tx` DECIMAL(18, 8) NOT NULL,
+    `total_value` DECIMAL(18, 4) NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    -- 設定外鍵約束，確保資料一致性
     FOREIGN KEY (`user_id`) REFERENCES `Users`(`user_id`) ON DELETE CASCADE,
     FOREIGN KEY (`asset_id`) REFERENCES `Assets`(`asset_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
--- ==============================================================================
--- [類別 3] 關聯橋接資料表 - 使用者持倉表 (Portfolios)
--- 紀錄使用者當下擁有的資產總量，方便 UPDATE 與快速查詢餘額
--- ==============================================================================
-CREATE TABLE `Portfolios` (
-    `portfolio_id` INT AUTO_INCREMENT PRIMARY KEY,
+-- 5. 建立使用者持倉表 (Portfolios) - 支援高精度小幣運算與合約清算
+CREATE TABLE IF NOT EXISTS `Portfolios` (
     `user_id` INT NOT NULL,
     `asset_id` INT NOT NULL,
-    `total_amount` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000 COMMENT '持有總數量',
+    `trade_mode` VARCHAR(20) NOT NULL DEFAULT 'spot', 
+    `total_amount` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000,
+    `avg_cost` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000, -- 🚀 升級至 8 位數精準度
+    `leverage` INT DEFAULT 1,
+    `margin` DECIMAL(18, 2) DEFAULT 0.00,
+    `liquidation_price` DECIMAL(18, 8) DEFAULT 0.00000000, -- 🚀 升級至 8 位數精準度
     `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
-    -- 確保同一個使用者對同一個資產只有一筆持倉加總紀錄
-    UNIQUE KEY `unique_user_asset` (`user_id`, `asset_id`),
+    PRIMARY KEY (`user_id`, `asset_id`, `trade_mode`),
     FOREIGN KEY (`user_id`) REFERENCES `Users`(`user_id`) ON DELETE CASCADE,
     FOREIGN KEY (`asset_id`) REFERENCES `Assets`(`asset_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
--- ==============================================================================
--- [進階擴充] K 線歷史報價表 (Klines_1m)
--- 用於 Python 模擬器寫入，前端 TradingView 畫圖讀取用
--- ==============================================================================
-CREATE TABLE `Klines_1m` (
-    `kline_id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+-- 6. 建立所有級別的 K 線歷史報價表 (提供 Python 引擎寫入與前端繪圖)
+CREATE TABLE IF NOT EXISTS `Klines_1m` (
     `asset_id` INT NOT NULL,
-    `open_time` DATETIME NOT NULL COMMENT 'K線起始時間',
+    `open_time` DATETIME NOT NULL,
     `open_price` DECIMAL(18, 8) NOT NULL,
     `high_price` DECIMAL(18, 8) NOT NULL,
     `low_price` DECIMAL(18, 8) NOT NULL,
     `close_price` DECIMAL(18, 8) NOT NULL,
-    `volume` DECIMAL(18, 8) NOT NULL,
-    
-    -- 建立複合索引：極大化提升歷史圖表的查詢速度
-    UNIQUE KEY `unique_asset_time` (`asset_id`, `open_time`),
+    `volume` DECIMAL(20, 8) NOT NULL,
+    PRIMARY KEY (`asset_id`, `open_time`),
     FOREIGN KEY (`asset_id`) REFERENCES `Assets`(`asset_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- 🚀 自動複製 Klines_1m 結構，快速建立所有需要的時框表格，防止 Python 報錯
+CREATE TABLE IF NOT EXISTS `Klines_3m` LIKE `Klines_1m`;
+CREATE TABLE IF NOT EXISTS `Klines_5m` LIKE `Klines_1m`;
+CREATE TABLE IF NOT EXISTS `Klines_15m` LIKE `Klines_1m`;
+CREATE TABLE IF NOT EXISTS `Klines_1h` LIKE `Klines_1m`;
+CREATE TABLE IF NOT EXISTS `Klines_4h` LIKE `Klines_1m`;
+CREATE TABLE IF NOT EXISTS `Klines_1d` LIKE `Klines_1m`;
+
 -- ==============================================================================
--- 插入測試資料 (符合簡報 Phase 4 規範)
+-- 插入測試資料
 -- ==============================================================================
--- 1. 新增測試帳號 (密碼均為 123456，此處先使用簡單 MD5 示範，後端實作時需改用 bcrypt)
-INSERT INTO `Users` (`username`, `password_hash`, `role`, `balance`) VALUES 
-('admin_user', MD5('123456'), 'admin', 999999.00),
-('student01', MD5('123456'), 'member', 100000.00);
 
--- 2. 新增測試資產標的
-INSERT INTO `Assets` (`symbol`, `name`, `current_price`) VALUES 
-('BTCUSDT', 'Bitcoin (比特幣)', 65000.50),
-('ETHUSDT', 'Ethereum (以太幣)', 3200.75),
-('TSM', 'Taiwan Semiconductor', 150.00);
+-- 寫入兩組測試帳號 (密碼皆為 123456，已使用正確的 Bcrypt 加密格式)
+INSERT IGNORE INTO `Users` (`username`, `email`, `password`, `role`, `balance`) VALUES 
+('admin_user', 'admin@test.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 999999.00),
+('student01', 'student@test.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'member', 100000.00);
 
--- 3. 新增一筆測試交易 (student01 買入 0.5 顆 BTC)
-INSERT INTO `Transactions` (`user_id`, `asset_id`, `tx_type`, `amount`, `price_at_tx`, `total_value`) VALUES 
-(2, 1, 'buy', 0.50000000, 65000.50, 32500.25);
-
--- 4. 更新持倉表
-INSERT INTO `Portfolios` (`user_id`, `asset_id`, `total_amount`) VALUES 
-(2, 1, 0.50000000);
+-- 🚀 寫入畫面上的 10 個交易標的
+INSERT IGNORE INTO `Assets` (`symbol`, `name`, `current_price`) VALUES 
+('BTCUSDT', 'Bitcoin', 73566.51),
+('ETHUSDT', 'Ethereum', 2016.26),
+('TSM', 'Taiwan Semiconductor', 418.61),
+('SOLUSDT', 'Solana (索拉納)', 82.30),
+('BNBUSDT', 'Binance Coin (幣安幣)', 672.43),
+('XRPUSDT', 'Ripple (瑞波幣)', 1.34),
+('DOGEUSDT', 'Dogecoin (狗狗幣)', 0.10),
+('NVDA', 'NVIDIA Corp (輝達)', 211.15),
+('AAPL', 'Apple Inc (蘋果)', 312.07),
+('2330.TW', 'TSMC (台灣神山台積電)', 2370.00);
