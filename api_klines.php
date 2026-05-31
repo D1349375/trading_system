@@ -1,10 +1,7 @@
 <?php
 header('Content-Type: application/json');
 
-$db_host = '127.0.0.1';
-$db_name = 'crypto_trading_db';
-$db_user = 'root';
-$db_pass = '';
+require_once __DIR__ . '/config.php';
 
 try {
     $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);
@@ -12,7 +9,7 @@ try {
 
     $asset_id = isset($_GET['asset_id']) ? (int)$_GET['asset_id'] : 1;
     $interval = isset($_GET['interval']) ? $_GET['interval'] : '1m';
-    $allowed_intervals = ['1m', '3m', '5m', '15m', '1h'];
+    $allowed_intervals = ['1m', '3m', '5m', '15m', '1h', '4h', '1d'];
     
     if (!in_array($interval, $allowed_intervals)) { $interval = '1m'; }
 
@@ -22,7 +19,7 @@ try {
     $asset_info = $stmt->fetch(PDO::FETCH_ASSOC);
     $is_crypto = ($asset_info && strpos($asset_info['symbol'], 'USDT') !== false);
 
-    $interval_seconds = ['1m'=>60, '3m'=>180, '5m'=>300, '15m'=>900, '1h'=>3600];
+    $interval_seconds = ['1m'=>60, '3m'=>180, '5m'=>300, '15m'=>900, '1h'=>3600, '4h'=>14400, '1d'=>86400];
     $step = $interval_seconds[$interval];
     $table_name = "Klines_" . $interval;
 

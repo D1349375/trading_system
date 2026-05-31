@@ -14,10 +14,7 @@ $current_user_id = $_SESSION['user_id'];
 $trade_message = '';
 
 // 初始化資料庫連線
-$db_host = '127.0.0.1';
-$db_name = 'crypto_trading_db';
-$db_user = 'root';
-$db_pass = '';
+require_once __DIR__ . '/config.php';
 
 try {
     $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);
@@ -290,6 +287,87 @@ foreach ($active_portfolios as $p) {
         .price-down { color: #f6465d !important; }
         .btn-buy { background-color: #00c087; color: white; font-weight: bold; }
         .btn-buy:hover { background-color: #00a875; color: white; }
+
+       /* ==========================================
+           📱 行動裝置專屬優化 (Mobile Responsive) - 完美終極版 V4
+           ========================================== */
+        @media (max-width: 767.98px) {
+            /* 1. 漢堡選單 */
+            .sidebar {
+                position: fixed !important; top: 0 !important; left: -100% !important;
+                width: 250px !important; height: 100vh !important; z-index: 1045 !important;
+                transition: left 0.3s ease-in-out !important;
+                background-color: #161a1e !important; border-right: 1px solid #2f3336 !important;
+            }
+            .sidebar.mobile-show { left: 0 !important; }
+            .sidebar-backdrop {
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0,0,0,0.6); z-index: 1040;
+                display: none; opacity: 0; transition: opacity 0.3s;
+            }
+            .sidebar-backdrop.mobile-show { display: block; opacity: 1; }
+
+            /* 2. 卡片與外部留白極致壓縮 */
+            .col-md-9.col-lg-10.p-4 { padding: 0.25rem !important; }
+            .card.p-2, .card.p-3, .card.p-4 { 
+                padding: 0.5rem !important; margin-bottom: 0.5rem !important; border-radius: 6px !important;
+            }
+
+            /* 3. 標題與文字精簡化 */
+            h2#active-asset { font-size: 1rem !important; }
+            h1#active-price { font-size: 1.25rem !important; }
+            h4 { font-size: 0.95rem !important; margin-bottom: 0.4rem !important; }
+            h5 { font-size: 0.9rem !important; margin-bottom: 0 !important; white-space: nowrap !important; }
+            
+            /* 4. 圖表 */
+            #tvchart { height: 280px !important; width: 100% !important; }
+
+            /* 5. 導覽列與 🏆 頂部價格/時間按鈕換行修復 */
+            .navbar .container-fluid { flex-wrap: wrap; padding: 0.25rem 0.5rem !important;}
+            .navbar > .container-fluid > .d-flex:last-child { width: 100%; justify-content: space-between; margin-top: 5px; font-size: 0.8rem; }
+            
+            /* 🔥 修復這裡：將最上方的價格與時間按鈕強制換行並上下排列 */
+            .card > .d-flex.flex-wrap {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 8px !important;
+            }
+            
+            #timeframe-buttons { display: flex; width: 100%; overflow-x: auto; }
+            #timeframe-buttons .btn { flex: 1 0 auto; padding: 0.15rem 0.3rem; font-size: 0.75rem; }
+            
+            /* 6. 表格與標籤極致壓縮 */
+            .table { font-size: 0.7rem !important; margin-bottom: 0 !important; }
+            .table th, .table td { 
+                padding: 0.25rem 0.2rem !important; white-space: nowrap !important; vertical-align: middle !important;
+            }
+            .badge { font-size: 0.65rem !important; padding: 0.2rem 0.3rem !important; }
+            .btn-sm { font-size: 0.75rem !important; padding: 0.2rem 0.4rem !important; }
+
+            /* 7. 🛒 現貨委託單 (下單表單) 專屬暴力瘦身 */
+            #trade-form .mb-3, #trade-form .mb-4 { margin-bottom: 0.35rem !important; }
+            #trade-form .nav-pills { padding: 0.15rem !important; }
+            #trade-form .nav-pills .nav-link { padding: 0.15rem 0.4rem !important; font-size: 0.75rem !important; }
+            #trade-form .btn-group label.btn { padding: 0.2rem !important; font-size: 0.85rem !important; }
+            .form-label { margin-bottom: 0.1rem !important; font-size: 0.7rem !important; }
+            #ui-trade-input, #unit-toggle-btn { height: 30px !important; padding: 0.1rem 0.5rem !important; font-size: 0.85rem !important; }
+            .card.bg-dark.bg-opacity-50 { padding: 0.4rem !important; margin-bottom: 0.4rem !important; }
+            .card.bg-dark.bg-opacity-50 .pt-2.mt-2 { padding-top: 0.25rem !important; margin-top: 0.25rem !important; }
+            #est-total { font-size: 1.1rem !important; }
+            #submit-btn.py-3.fs-5 { 
+                padding-top: 0 !important; padding-bottom: 0 !important; height: 36px !important; 
+                font-size: 0.95rem !important; display: flex !important; align-items: center !important; justify-content: center !important;
+            }
+            .text-center.mt-3.pt-2 { margin-top: 0.2rem !important; padding-top: 0.2rem !important; font-size: 0.65rem !important; }
+
+            /* 8. 🔄 防止「部位切換」與「卡片標題」換行 (排除有 flex-wrap 的頂部價格區塊) */
+            .card > .d-flex.justify-content-between.align-items-center:not(.flex-wrap) { 
+                flex-wrap: nowrap !important; gap: 5px !important; 
+            }
+            .card > .d-flex .nav-pills { flex-wrap: nowrap !important; margin-bottom: 0 !important; }
+            .card > .d-flex .nav-pills .nav-item { white-space: nowrap !important; }
+            .card > .d-flex .nav-pills .nav-link { padding: 0.2rem 0.4rem !important; font-size: 0.7rem !important; }
+        }
     </style>
 </head>
 <body>
@@ -297,9 +375,14 @@ foreach ($active_portfolios as $p) {
     <nav class="navbar navbar-dark sticky-top shadow-sm py-2">
 
         <div class="container-fluid">
-            <a class="navbar-brand d-flex align-items-center fw-bold text-success" href="#">
-                <i class="bi bi-lightning-charge-fill me-2"></i> QUANT TERMINAL Pro
-            </a>
+            <div class="d-flex align-items-center">
+                <button class="btn btn-dark btn-sm d-md-none me-2 border-secondary" type="button" onclick="toggleMobileMenu()">
+                    <i class="bi bi-list fs-4"></i>
+                </button>
+                <a class="navbar-brand d-flex align-items-center fw-bold text-success m-0" href="#">
+                    <i class="bi bi-lightning-charge-fill me-2"></i> QUANT TERMINAL Pro
+                </a>
+            </div>
             <div class="d-flex align-items-center">
                 <span class="me-4 text-secondary"><i class="bi bi-wallet2 me-2"></i>模擬金餘額: <strong class="text-light">$ <?= number_format($userInfo['balance'], 2) ?></strong></span>
                 
@@ -316,7 +399,11 @@ foreach ($active_portfolios as $p) {
                 </div>
             </div>
         </div>
-    </nav><div class="container-fluid">
+    </nav>
+
+    <div class="sidebar-backdrop d-md-none" onclick="toggleMobileMenu()"></div>
+
+    <div class="container-fluid">
         <div class="row">
 
     <div class="col-md-3 col-lg-2 sidebar p-0">
@@ -619,17 +706,41 @@ foreach ($active_portfolios as $p) {
         let currentTradeMode = 'spot'; // 🚀 修復 2：把這兩個變數移到最上方，確保初始化時就存在
         let inputUnitMode = 'amount';  
 
-        // 1. 初始化 TradingView Lightweight Chart
+        // 1. 初始化 TradingView Lightweight Chart (圖表外框)
         const chart = LightweightCharts.createChart(document.getElementById('tvchart'), {
             layout: { background: { type: 'solid', color: '#161a1e' }, textColor: '#d1d4dc' },
             grid: { vertLines: { color: '#24292e' }, horzLines: { color: '#24292e' } },
             timeScale: { timeVisible: true, secondsVisible: false, timeFormat: '%m/%d %H:%M' }
         });
 
+        // 🎯 遺失的關鍵拼圖：初始化 K 線系列 (蠟燭圖本體)
         const candleSeries = chart.addCandlestickSeries({
             upColor: '#00c087', downColor: '#f6465d', borderVisible: false, wickUpColor: '#00c087', wickDownColor: '#f6465d'
         });
 
+        // 🚀 手機版側邊欄開關邏輯
+        function toggleMobileMenu() {
+            document.querySelector('.sidebar').classList.toggle('mobile-show');
+            document.querySelector('.sidebar-backdrop').classList.toggle('mobile-show');
+        }
+
+        // 🚀 安全的圖表縮放：確保圖表隨螢幕大小改變
+        window.addEventListener('resize', () => {
+            const chartContainer = document.getElementById('tvchart');
+            if (chartContainer && chartContainer.clientWidth > 0) {
+                chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
+            }
+        });
+        
+        // 初次載入時，給予一點延遲確保抓到正確的手機螢幕寬度，把圖表畫出來
+        setTimeout(() => {
+            const chartContainer = document.getElementById('tvchart');
+            if (chartContainer && chartContainer.clientWidth > 0) {
+                chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
+            }
+        }, 300);
+
+        // --- 下方保留你原本的 function selectAsset(assetId) 等等... ---
         // 🚀 修正一：動態切換商品標題與下單單位
         function selectAsset(assetId) {
             currentAssetId = assetId;
@@ -652,6 +763,8 @@ foreach ($active_portfolios as $p) {
 
             fetchKlinesAndDraw('1m'); 
             updateHoldingHint();
+            // 如果是在手機版，點擊後自動關閉側邊欄
+            if (window.innerWidth < 768) toggleMobileMenu();
         }
 
         // 🚀 修正二：加入「圖表崩潰自動救援」的終極防護
@@ -981,6 +1094,8 @@ foreach ($active_portfolios as $p) {
                 }
             });
         }
+
+        
     </script>
             </div> </div> </div> <div class="modal fade" id="fundsModal" tabindex="-1" aria-labelledby="fundsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
