@@ -269,6 +269,14 @@ foreach ($active_portfolios as $p) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>專業級量化資產交易終端</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quant Pro">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#161a1e">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
@@ -1339,5 +1347,27 @@ foreach ($active_portfolios as $p) {
             </div>
         </div>
     </div>
+                <div class="modal-footer border-secondary border-opacity-50">
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-sm btn-success fw-bold px-4">確認變更金流</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => {
+                    console.log('PWA ServiceWorker 註冊成功:', registration.scope);
+                })
+                .catch(error => {
+                    console.log('PWA ServiceWorker 註冊失敗:', error);
+                });
+        });
+    }
+</script>
 </body>
 </html>

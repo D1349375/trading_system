@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- 專案名稱：QUANT TERMINAL Pro - 虛擬資產模擬交易系統
--- 階段：終極完整版 (包含合約欄位、高精度小數點、多時框 K 線、完整預設標的)
+-- 階段：終極完整版 (包含合約欄位、高精度小數點、多時框 K 線、完整預設標的、PWA、止盈止損)
 -- ==============================================================================
 
 -- 1. 建立並切換至資料庫
@@ -45,16 +45,18 @@ CREATE TABLE IF NOT EXISTS `Transactions` (
     FOREIGN KEY (`asset_id`) REFERENCES `Assets`(`asset_id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
--- 5. 建立使用者持倉表 (Portfolios) - 支援高精度小幣運算與合約清算
+-- 5. 建立使用者持倉表 (Portfolios) - 支援高精度小幣運算、合約清算與 TP/SL
 CREATE TABLE IF NOT EXISTS `Portfolios` (
     `user_id` INT NOT NULL,
     `asset_id` INT NOT NULL,
     `trade_mode` VARCHAR(20) NOT NULL DEFAULT 'spot', 
     `total_amount` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000,
-    `avg_cost` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000, -- 🚀 升級至 8 位數精準度
+    `avg_cost` DECIMAL(18, 8) NOT NULL DEFAULT 0.00000000,
     `leverage` INT DEFAULT 1,
     `margin` DECIMAL(18, 2) DEFAULT 0.00,
-    `liquidation_price` DECIMAL(18, 8) DEFAULT 0.00000000, -- 🚀 升級至 8 位數精準度
+    `liquidation_price` DECIMAL(18, 8) DEFAULT 0.00000000,
+    `tp_price` DECIMAL(18, 8) DEFAULT NULL, -- 🎯 止盈觸發價 (Take Profit)
+    `sl_price` DECIMAL(18, 8) DEFAULT NULL, -- 🛑 止損觸發價 (Stop Loss)
     `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`user_id`, `asset_id`, `trade_mode`),
     FOREIGN KEY (`user_id`) REFERENCES `Users`(`user_id`) ON DELETE CASCADE,
