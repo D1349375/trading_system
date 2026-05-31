@@ -19,9 +19,10 @@ DB_CONFIG = {
 BINANCE_KLINE_URL = "https://api.binance.com/api/v3/klines"
 IS_WARM_UP = True
 
-# 全域變數定義區 (剛剛你截圖中遺失的部分)
-CRYPTO_INTERVALS = ['1m', '3m', '5m', '15m', '1h']
-STOCK_INTERVALS = ['1m', '5m', '15m', '60m'] 
+# 全域變數定義區 (🚀 新增 4h 與 1d)
+CRYPTO_INTERVALS = ['1m', '3m', '5m', '15m', '1h', '4h', '1d']
+# 注意：Yahoo Finance 不支援 4h，所以股票只加 1d
+STOCK_INTERVALS = ['1m', '5m', '15m', '60m', '1d']
 
 def fetch_and_update():
     global IS_WARM_UP
