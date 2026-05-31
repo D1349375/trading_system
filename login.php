@@ -4,7 +4,7 @@ session_start();
 
 // 如果使用者已經登入，直接導向交易主頁，不需要重複登入
 if (isset($_SESSION['user_id'])) {
-    header("Location: index.php");
+    header("Location: index");
     exit;
 }
 
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['role'] = $user['role'];
 
                 $message = "<div class='alert alert-success border-0 bg-success text-light'>登入成功</div>";
-                header("Refresh: 1; url=index.php");
+                header("Refresh: 1; url=index");
             } else {
                 $message = "<div class='alert alert-danger border-0 bg-danger text-light'>❌ 帳號或密碼錯誤！</div>";
             }
@@ -56,6 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QUANT TERMINAL - 會員登入</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quant Pro">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#161a1e">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
@@ -91,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="mb-4">
             <div class="d-flex justify-content-between align-items-center mb-1">
                 <label class="form-label text-secondary small fw-bold mb-0">安全密碼 (Password)</label>
-                <a href="forgot_password.php" class="text-success text-decoration-none small">忘記密碼？</a>
+                <a href="forgot_password" class="text-success text-decoration-none small">忘記密碼？</a>
             </div>
             <input type="password" class="form-control" name="password" required placeholder="請輸入密碼">
         </div>
@@ -111,10 +118,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </button>
 
         <div class="text-center small">
-            <span class="text-secondary">還沒有交易帳戶？</span> <a href="register.php" class="text-success text-decoration-none fw-bold">立即註冊</a>
+            <span class="text-secondary">還沒有交易帳戶？</span> <a href="register" class="text-success text-decoration-none fw-bold">立即註冊</a>
         </div>
     </form>
 </div>
 
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => {
+                    console.log('PWA ServiceWorker 註冊成功:', registration.scope);
+                })
+                .catch(error => {
+                    console.log('PWA ServiceWorker 註冊失敗:', error);
+                });
+        });
+    }
+</script>
 </body>
 </html>

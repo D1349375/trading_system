@@ -32,13 +32,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // 🔐 安全高規格：使用 PHP 官方推薦的 BCRYPT 進行密碼雜湊加密
                 $hashed_password = password_hash($password, PASSWORD_BCRYPT);
-                
-                // 寫入新使用者，並設定初始資金
                 $stmt = $pdo->prepare("INSERT INTO Users (username, email, password, balance, role) VALUES (?, ?, ?, ?, 'member')");
                 $stmt->execute([$username, $email, $hashed_password, $initial_balance]);
                 
                 $message = "<div class='alert alert-success border-0 bg-success text-light'>🎉 註冊成功！3秒後自動導向登入頁面...</div>";
-                header("Refresh: 3; url=login.php");
+                header("Refresh: 3; url=login");
             }
         } catch (Exception $e) {
             $message = "<div class='alert alert-danger border-0 bg-danger text-light'>❌ 系統錯誤: " . $e->getMessage() . "</div>";
@@ -52,6 +50,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QUANT TERMINAL - 建立帳戶</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quant Pro">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#161a1e">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
@@ -99,10 +104,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit" class="btn btn-success w-100 py-2.5 mb-3"><i class="bi bi-person-plus-fill me-2"></i>註冊全新帳戶</button>
         
         <div class="text-center small">
-            <span class="text-secondary">已經有帳戶了？</span> <a href="login.php" class="text-success text-decoration-none fw-bold">立即登入</a>
+            <span class="text-secondary">已經有帳戶了？</span> <a href="login" class="text-success text-decoration-none fw-bold">立即登入</a>
         </div>
     </form>
 </div>
 
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => {
+                    console.log('PWA ServiceWorker 註冊成功:', registration.scope);
+                })
+                .catch(error => {
+                    console.log('PWA ServiceWorker 註冊失敗:', error);
+                });
+        });
+    }
+</script>
 </body>
 </html>
