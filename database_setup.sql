@@ -1,18 +1,19 @@
 -- ==============================================================================
 -- 專案名稱：QUANT TERMINAL Pro - 虛擬資產模擬交易系統
--- 階段：終極完整版 (包含合約欄位、高精度小數點、多時框 K 線、完整預設標的、PWA、止盈止損)
+-- 階段：終極完整版 (包含合約欄位、高精度小數點、多時框 K 線、完整預設標的、PWA、止盈止損、Google SSO)
 -- ==============================================================================
 
 -- 1. 建立並切換至資料庫
 CREATE DATABASE IF NOT EXISTS `crypto_trading_db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `crypto_trading_db`;
 
--- 2. 建立使用者資料表 (Users) - 支援 Email 與 Bcrypt 長密碼防截斷
+-- 2. 建立使用者資料表 (Users) - 支援 Email 與 Bcrypt 長密碼防截斷、Google SSO
 CREATE TABLE IF NOT EXISTS `Users` (
     `user_id` INT AUTO_INCREMENT PRIMARY KEY,
     `username` VARCHAR(50) NOT NULL UNIQUE,
     `email` VARCHAR(100) NOT NULL UNIQUE,
     `password` VARCHAR(255) NOT NULL,
+    `google_id` VARCHAR(255) NULL UNIQUE,  -- Google SSO 識別碼 (sub);一般帳號為 NULL
     `role` ENUM('admin', 'member', 'guest') DEFAULT 'member',
     `balance` DECIMAL(18, 4) DEFAULT 100000.0000,
     `status` ENUM('active', 'suspended') DEFAULT 'active',

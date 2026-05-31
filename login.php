@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <div class="divider my-3">或使用第三方帳戶</div>
         
-        <button type="button" class="btn btn-google w-100 py-2 mb-4 d-flex align-items-center justify-content-center" onclick="alert('Google 快捷登入介面已就緒，待後端 API 憑證設定完成後即可通電！')">
+        <a href="login_google" class="btn btn-google w-100 py-2 mb-4 d-flex align-items-center justify-content-center">
             <svg class="me-2" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 48 48">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                 <path fill="#4285F4" d="M46.5 24c0-1.61-.15-3.16-.42-4.69H24v8.87h12.66c-.54 2.85-2.15 5.27-4.57 6.89l7.1 5.51C43.34 36.16 46.5 30.67 46.5 24z"/>
@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.1-5.51c-1.97 1.32-4.5 2.11-7.79 2.11-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
             </svg>
             使用 Google 帳戶登入
-        </button>
+        </a>
 
         <div class="text-center small">
             <span class="text-secondary">還沒有交易帳戶？</span> <a href="register" class="text-success text-decoration-none fw-bold">立即註冊</a>
