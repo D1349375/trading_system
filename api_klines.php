@@ -1,10 +1,7 @@
 <?php
 header('Content-Type: application/json');
 
-$db_host = '127.0.0.1';
-$db_name = 'crypto_trading_db';
-$db_user = 'root';
-$db_pass = '';
+require_once __DIR__ . '/config.php';
 
 try {
     $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8mb4", $db_user, $db_pass);

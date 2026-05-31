@@ -3,14 +3,17 @@ import requests
 import pymysql
 import yfinance as yf
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 # ==========================================
 # 1. 資料庫連線設定
 # ==========================================
 DB_CONFIG = {
     'host': '127.0.0.1',
-    'user': 'root',
-    'password': '',
+    'user': os.getenv("DB_USER"),
+    'password': os.getenv("DB_PASS"),
     'database': 'crypto_trading_db',
     'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor

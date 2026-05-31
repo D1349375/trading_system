@@ -1,10 +1,17 @@
 import time
 import pymysql
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 
 DB_CONFIG = {
-    'host': '127.0.0.1', 'user': 'root', 'password': '',
-    'database': 'crypto_trading_db', 'charset': 'utf8mb4',
+    'host': '127.0.0.1',
+    'user': os.getenv("DB_USER"),
+    'password': os.getenv("DB_PASS"),
+    'database': 'crypto_trading_db',
+    'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor
 }
 
