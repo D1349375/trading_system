@@ -4,7 +4,7 @@ session_start();
 
 // 1. 核心權限鎖
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: index.php");
+    header("Location: index");
     exit;
 }
 
@@ -158,7 +158,7 @@ $assets = $pdo->query("SELECT asset_id, symbol, name, current_price, status FROM
         </a>
         <div class="d-flex align-items-center ms-auto">
             <span class="text-secondary me-3">管理員：<strong class="text-light"><?= htmlspecialchars($_SESSION['username']) ?></strong></span>
-            <a href="index.php" class="btn btn-outline-success btn-sm rounded-pill px-3"><i class="bi bi-display me-1"></i>返回交易終端</a>
+            <a href="index" class="btn btn-outline-success btn-sm rounded-pill px-3"><i class="bi bi-display me-1"></i>返回交易終端</a>
         </div>
     </div>
 </nav>

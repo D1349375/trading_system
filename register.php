@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$username, $email, $hashed_password, $initial_balance]);
                 
                 $message = "<div class='alert alert-success border-0 bg-success text-light'>🎉 註冊成功！3秒後自動導向登入頁面...</div>";
-                header("Refresh: 3; url=login.php");
+                header("Refresh: 3; url=login");
             }
         } catch (Exception $e) {
             $message = "<div class='alert alert-danger border-0 bg-danger text-light'>❌ 系統錯誤: " . $e->getMessage() . "</div>";
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button type="submit" class="btn btn-success w-100 py-2.5 mb-3"><i class="bi bi-person-plus-fill me-2"></i>註冊全新帳戶</button>
         
         <div class="text-center small">
-            <span class="text-secondary">已經有帳戶了？</span> <a href="login.php" class="text-success text-decoration-none fw-bold">立即登入</a>
+            <span class="text-secondary">已經有帳戶了？</span> <a href="login" class="text-success text-decoration-none fw-bold">立即登入</a>
         </div>
     </form>
 </div>

@@ -5,7 +5,7 @@ session_start();
 
 // 🔐 安全防護：檢查使用者是否持有登入 Session。若未授權，強制踢回登入頁面！
 if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
+    header("Location: login");
     exit;
 }
 
@@ -432,7 +432,7 @@ foreach ($active_portfolios as $p) {
                         <li><h6 class="dropdown-header text-secondary">帳號設定</h6></li>
                         <li><a class="dropdown-item py-2" href="#" data-bs-toggle="modal" data-bs-target="#fundsModal"><i class="bi bi-wallet2 me-2 text-warning"></i>調整 / 重置模擬資金</a></li>
                         <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
-                        <li><a class="dropdown-item text-danger py-2 fw-bold" href="logout.php"><i class="bi bi-box-arrow-right me-2"></i>安全登出</a></li>
+                        <li><a class="dropdown-item text-danger py-2 fw-bold" href="logout"><i class="bi bi-box-arrow-right me-2"></i>安全登出</a></li>
                     </ul>
                 </div>
             </div>
@@ -450,12 +450,12 @@ foreach ($active_portfolios as $p) {
     </div>
 
     <div class="p-2 border-bottom border-secondary border-opacity-25 bg-dark">
-        <form method="GET" action="index.php" class="m-0">
+        <form method="GET" action="index" class="m-0">
             <div class="input-group input-group-sm">
                 <span class="input-group-text bg-transparent border-secondary text-secondary"><i class="bi bi-search"></i></span>
                 <input type="text" class="form-control bg-transparent border-secondary text-light" name="search" placeholder="搜尋代碼或名稱..." value="<?= htmlspecialchars($search_keyword) ?>">
                 <?php if ($search_keyword !== ''): ?>
-                    <a href="index.php" class="btn btn-outline-danger border-secondary"><i class="bi bi-x-lg"></i></a>
+                    <a href="index" class="btn btn-outline-danger border-secondary"><i class="bi bi-x-lg"></i></a>
                 <?php endif; ?>
             </div>
         </form>
