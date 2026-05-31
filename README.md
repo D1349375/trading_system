@@ -41,6 +41,10 @@
 * 使用 PHP 官方高規格 **BCrypt** 進行密碼雜湊加密。
 * 完整管理員（Admin Panel）控制台，支援同級保護機制、自訂使用者模擬金（$1,000 ~ $10,000,000 USDT）與標的軟刪除（Soft Delete）下架機制。
 
+### 6. 🔗 URL Rewrite 路由美化與資安強化 (`.htaccess`)
+* 實作 Apache `mod_rewrite` 重寫引擎，全面隱藏系統背後的 `.php` 副檔名。
+* 提供乾淨、現代化的 RESTful 風格路由體驗（如 `/login`、`/register`），防止真實伺服器檔案路徑外洩，大幅提升系統專業度與防護力。
+
 ---
 
 ## 📁 專案檔案結構說明
@@ -56,6 +60,7 @@
 | `liquidation_engine.py` | 全域風控觸發引擎 | 5秒背景輪詢，處理爆倉清算、止盈(TP)與止損(SL)自動平倉退款。 |
 | `manifest.json` & `sw.js` | PWA 核心設定檔 | 控制 App 獨立顯示模式、背景顏色與 Service Worker 快取攔截。 |
 | `icon-*.png` | App 桌面圖示 | 符合 Android/iOS 規範的 192x192 與 512x512 Maskable 安全邊距圖標。 |
+| `.htaccess` | Apache 伺服器設定檔 | 啟動 URL Rewrite 引擎，攔截請求並隱藏 `.php` 網址副檔名。 |
 
 ---
 
@@ -82,7 +87,6 @@
 ```bash
 pip install requests pymysql yfinance
 ```
-
 #### 步驟三：設定資料庫連線防呆
 確認專案中所有 PHP 檔案（如 `index.php`, `api_klines.php`, `login.php`, `register.php`, `admin.php`）與 Python 檔案（`data_fetcher.py`, `liquidation_engine.py`）中的資料庫連線參數。預設設定如下：
 * **Host**: `127.0.0.1`
@@ -111,8 +115,8 @@ python liquidation_engine.py
 *控制台會顯示 `🤖 全域風控引擎 (Liquidation & TP/SL Engine) 已啟動`，代表背景平倉守護程式已就緒。*
 
 ### 3️⃣ 登入終端體驗模擬交易 (或安裝為 App)
-* **電腦端**：開啟瀏覽器，輸入網址：`http://localhost/quant-terminal/login.php`
-* **手機端 (PWA 體驗)**：確保手機與電腦在同一個 Wi-Fi 下，用手機瀏覽器輸入電腦的區域 IP（例如 `http://192.168.x.x/quant-terminal/login.php`），並點擊瀏覽器選單中的 **「加入主畫面 / Add to Home Screen」**。
+* **電腦端**：開啟瀏覽器，輸入網址：`http://localhost/quant-terminal/login`
+* **手機端 (PWA 體驗)**：確保手機與電腦在同一個 Wi-Fi 下，用手機瀏覽器輸入電腦的區域 IP（例如 `http://192.168.x.x/quant-terminal/login`），並點擊瀏覽器選單中的 **「加入主畫面 / Add to Home Screen」**。
 
 **🔑 內建測試憑證（密碼皆為 `123456`）：**
 * **一般會員交易帳戶**：`student01`
