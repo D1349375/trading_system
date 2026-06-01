@@ -1344,13 +1344,6 @@ foreach ($active_portfolios as $p) {
             </div>
         </div>
     </div>
-                <div class="modal-footer border-secondary border-opacity-50">
-                    <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-bs-dismiss="modal">取消</button>
-                    <button type="submit" class="btn btn-sm btn-success fw-bold px-4">確認變更金流</button>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
 
 <script>
